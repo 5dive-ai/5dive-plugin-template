@@ -1,0 +1,46 @@
+{
+  "name": "hello",
+  "version": "0.1.0",
+  "description": "Says hello. Replace it with what your plugin does.",
+  "author": {
+    "name": "Your name"
+  },
+  "homepage": "https://github.com/5dive-ai/5dive-plugin-template",
+  "license": "MIT",
+  "keywords": ["5dive", "example"],
+  "skills": "./skills/",
+  "fivedive": {
+    "contract": "1",
+    "capabilities": ["verb", "skill"],
+    "verbs": [
+      {"name": "hello", "summary": "say hello (the template's example verb)"}
+    ],
+    "trust": {
+      "publisher": "Your name",
+      "review": "community"
+    },
+    "settings": {
+      "verb": "hello",
+      "fields": [
+        {
+          "key": "greeting",
+          "label": "Greeting",
+          "type": "string",
+          "default": "Hello",
+          "help": "The word the verb starts with."
+        },
+        {
+          "key": "style",
+          "label": "Style",
+          "type": "enum",
+          "options": [
+            {"value": "plain", "label": "Plain"},
+            {"value": "loud", "label": "Loud"}
+          ],
+          "default": "plain",
+          "help": "Loud prints the greeting in capitals."
+        }
+      ]
+    }
+  }
+}
