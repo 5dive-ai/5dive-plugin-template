@@ -5,7 +5,8 @@ one setting. Copy it, rename it, and you have a working plugin to build on.
 
 A 5dive plugin adds something to every agent on your server at once, such as a new
 `5dive <verb>` command, a skill, or an MCP server. This template adds the command
-`5dive hello` and a skill that tells your agents when to use it.
+`5dive hello` and a skill that tells your agents when to use it. The plugins that 5dive
+publishes are on the [5dive marketplace](https://5dive.ai/marketplace).
 
 ## Try it as it is
 
