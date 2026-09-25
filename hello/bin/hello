@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# `5dive hello`: the template's example verb.
+#
+# 5dive runs this file because the manifest declares the `verb` capability and a
+# verb named `hello`. The dispatcher looks for <plugin>/bin/<verb> and passes the
+# user's arguments through unchanged. The manifest never supplies a command line.
+# Rename the verb and you rename this file with it.
+#
+# It also speaks the settings protocol that `fivedive.settings` promises, so the
+# 5dive dashboard can draw a form for it:
+#   hello config --json          -> {"ok":true,"values":{...},"notices":[]}
+#   hello config get <key>
+#   sudo hello config set <key> <value>
+# The manifest is the one list of what can be set. This file reads it instead of
+# keeping a second copy.
+#
+# 5dive takes `--json` out of the arguments before it runs a verb and passes it as
+# FIVEDIVE_JSON_MODE=1 instead, so read both.
+set -euo pipefail
+
+PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+MANIFEST="$PLUGIN_DIR/.claude-plugin/plugin.json"
+VERB="$(basename "$0")"
+# Settings are a box-level choice, so they live outside the version-keyed install
+# directory and survive `5dive plugin upgrade`.
+STATE="${HELLO_STATE_DIR:-${STATE_DIR:-/var/lib/5dive}/plugin-data/$VERB}"
+CONFIG="$STATE/config"
+# One config line per value: no spaces, quotes or newlines, and nothing that
+# starts like a flag.
+VALUE_RE='^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$'
+
+die() { printf 'error: %s\n' "$1" >&2; exit "${2:-1}"; }
+
+usage() {
+  cat <<USAGE
+5dive $VERB: say hello (an example 5dive plugin verb)
+
+  5dive $VERB [name]                     print a greeting
+  5dive $VERB config [--json]            show every setting
+  5dive $VERB config get <key>
+  sudo 5dive $VERB config set <key> <value>
+USAGE
+}
+
+need_jq() { command -v jq >/dev/null 2>&1 || die "jq is required to read this plugin's settings"; }
+keys()  { jq -r '(.fivedive.settings.fields // [])[] | .key' "$MANIFEST"; }
+field() { jq -c --arg k "$1" '(.fivedive.settings.fields // [])[] | select(.key == $k)' "$MANIFEST"; }
+
+# value <key>: the saved value, or the manifest's default.
+value() {
+  local v=""
+  [[ -r "$CONFIG" ]] && v="$(grep -m1 "^$1=" "$CONFIG" | cut -d= -f2- || true)"
+  [[ -n "$v" ]] || v="$(field "$1" | jq -r '.default // empty')"
+  printf '%s\n' "$v"
+}
+
+# save <key> <value>: rewrite one line, atomically (temp file, then rename).
+save() {
+  mkdir -p "$STATE" || die "could not create $STATE (try sudo)"
+  local tmp
+  tmp="$(mktemp "$STATE/.config.XXXXXX")" || die "could not write in $STATE (try sudo)"
+  { [[ -r "$CONFIG" ]] && grep -v "^$1=" "$CONFIG" || true; printf '%s=%s\n' "$1" "$2"; } >"$tmp"
+  chmod 644 "$tmp"
+  mv -f "$tmp" "$CONFIG"
+}
+
+cmd_config() {
+  need_jq
+  local json=0
+  [[ "${FIVEDIVE_JSON_MODE:-0}" == 1 ]] && json=1
+  if [[ "${1:-}" == --json ]]; then json=1; shift; fi
+  case "${1:-}" in
+    "")
+      if (( json )); then
+        local vals='{}' k
+        while IFS= read -r k; do
+          vals="$(jq -c --arg k "$k" --arg v "$(value "$k")" '. + {($k): $v}' <<<"$vals")"
+        done < <(keys)
+        jq -cn --argjson values "$vals" '{ok: true, values: $values, notices: []}'
+      else
+        local k
+        while IFS= read -r k; do printf '%s=%s\n' "$k" "$(value "$k")"; done < <(keys)
+      fi
+      ;;
+    get)
+      [[ $# -eq 2 ]] || die "usage: 5dive $VERB config get <key>" 64
+      [[ -n "$(field "$2")" ]] || die "unknown setting '$2' (settable: $(keys | paste -sd' '))" 2
+      value "$2"
+      ;;
+    set)
+      [[ $# -eq 3 ]] || die "usage: sudo 5dive $VERB config set <key> <value>" 64
+      local f; f="$(field "$2")"
+      [[ -n "$f" ]] || die "unknown setting '$2' (settable: $(keys | paste -sd' '))" 2
+      [[ "$3" =~ $VALUE_RE ]] || die "'$3' is not a valid $2: letters, digits and . _ : / @ + - only, at most 128 characters" 2
+      if [[ "$(jq -r .type <<<"$f")" == enum ]]; then
+        jq -e --arg v "$3" '[.options[]? | if type == "object" then .value else . end] | index($v) != null' <<<"$f" >/dev/null \
+          || die "'$3' is not a choice for $2 (want: $(jq -r '[.options[]? | if type == "object" then .value else . end] | join(" | ")' <<<"$f"))" 2
+      fi
+      save "$2" "$3"
+      if (( json )); then jq -cn --arg k "$2" --arg v "$3" '{ok: true, key: $k, value: $v}'; else printf '%s=%s\n' "$2" "$3"; fi
+      ;;
+    *) die "unknown: config $1 (want: get, set, or nothing)" 64 ;;
+  esac
+}
+
+case "${1:-}" in
+  -h|--help|help) usage ;;
+  config) shift; cmd_config "$@" ;;
+  *)
+    need_jq
+    greeting="$(value greeting) ${1:-there}"
+    [[ "$(value style)" == loud ]] && greeting="${greeting^^}"
+    printf '%s!\n' "$greeting"
+    ;;
+esac

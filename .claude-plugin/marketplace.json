@@ -1,0 +1,15 @@
+{
+  "name": "5dive-plugin-template",
+  "description": "The smallest 5dive plugin that installs: one verb, one skill, one setting. Start your own from it.",
+  "owner": {
+    "name": "Your name"
+  },
+  "plugins": [
+    {
+      "name": "hello",
+      "description": "Says hello. Replace it with what your plugin does.",
+      "category": "example",
+      "source": "./hello"
+    }
+  ]
+}
